@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: default
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      # Actual dashboard JSON lands here in a later phase, once the app
+      # produces real logs to build panels/queries against. Empty for now
+      # (see json/.gitkeep).
+      path: /etc/grafana/provisioning/dashboards/json

@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: todolist-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: todolist
+      POSTGRES_USER: todolist
+      POSTGRES_PASSWORD: todolist
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todolist -d todolist"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - observability
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: todolist-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://todolist:todolist@postgres:5432/todolist
+    # Docker's default json-file log driver (explicit here for clarity, not a
+    # custom driver). Fluent Bit does NOT read this container's stdout via a
+    # Docker API/log-driver plugin -- it tails the log file this driver writes
+    # to on the host, at /var/lib/docker/containers/<id>/<id>-json.log. See the
+    # fluent-bit service below and fluent-bit/fluent-bit.conf for details.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    container_name: todolist-fluent-bit
+    restart: unless-stopped
+    depends_on:
+      - web
+      - loki
+    volumes:
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      # Lets Fluent Bit's tail input reach every container's json-file log on
+      # the host, the standard way to ship Docker container logs without a
+      # custom log driver.
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Not consumed by the current fluent-bit.conf (stock Fluent Bit has no
+      # bundled filter that queries the Docker Engine API for container
+      # metadata on non-Kubernetes hosts); mounted read-only now so a future
+      # enrichment step (e.g. resolving container IDs to names) doesn't
+      # require a compose change.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - observability
+
+  loki:
+    image: grafana/loki:latest
+    container_name: todolist-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks:
+      - observability
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: todolist-grafana
+    restart: unless-stopped
+    depends_on:
+      - loki
+    # Host 3000 is taken by `web`, so Grafana's UI is on 3001; the container
+    # still listens on its normal port 3000 internally.
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - observability
+
+volumes:
+  postgres-data:
+  loki-data:
+  grafana-data:
+
+networks:
+  observability:
+    driver: bridge
