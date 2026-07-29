@@ -56,23 +56,26 @@ export async function POST(request: Request, { params }: RouteParams) {
         dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
         listId,
         position: itemCount,
+        // BUG (BUGS.md #2 broken task creation): `notes` does not exist on
+        // the TodoItem model (see prisma/schema.prisma) -- this is an
+        // unknown-field ORM misuse that makes Prisma throw a validation
+        // error on every single call, so "Add task" always fails.
+        notes: parsed.data.title,
       },
     });
 
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        route: "/api/lists/[listId]/items",
-        msg: "failed to create todo item",
-        userId: session.userId,
-        listId,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    );
+    // BUG (BUGS.md #3 terrible exception handling -- raw stack trace): the
+    // raw error and its stack are sent straight to the client with no
+    // structured server-side log recording the failure, so there is nothing
+    // to grep for in stdout/Fluent Bit -- the only place the real error is
+    // visible is the browser network tab.
     return NextResponse.json(
-      { error: "Something went wrong. Please try again." },
+      {
+        error: String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
       { status: 500 },
     );
   }

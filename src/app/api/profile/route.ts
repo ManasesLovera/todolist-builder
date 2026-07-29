@@ -64,10 +64,16 @@ export async function PATCH(request: Request) {
 
   let updated;
   try {
+    // BUG (BUGS.md #4 broken profile update): `data` is built up above from
+    // the parsed name/email/newPassword fields, but it's never actually
+    // passed into the update call below -- `{}` is passed instead. Prisma
+    // happily "updates" the row with no field changes, so this returns 200
+    // and the client shows a success toast, but nothing in the DB changes.
     updated = await prisma.user.update({
       where: { id: session.userId },
-      data,
+      data: {},
     });
+    void data;
   } catch (error) {
     if (
       error &&
@@ -119,6 +125,21 @@ export async function PATCH(request: Request) {
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
+
+  // Clean structured log for Fluent Bit. Note this fires whenever the update
+  // call resolves without throwing -- with BUG #4 above, that's every time,
+  // even though no fields were actually persisted, so "profile_updated" in
+  // the logs does not reliably mean the row changed.
+  console.log(
+    JSON.stringify({
+      level: "info",
+      event: "profile_updated",
+      route: "/api/profile",
+      userId: session.userId,
+      outcome: "success",
+      timestamp: new Date().toISOString(),
+    }),
+  );
 
   return response;
 }

@@ -21,7 +21,11 @@ async function loadOwnedItem(
   });
 
   if (!item || item.listId !== listId) {
-    return { status: 404 as const, error: "Item not found." };
+    // BUG (BUGS.md #9 wrong/inconsistent HTTP status codes): a missing item
+    // should be a 404, not a 500. Every PATCH/DELETE against a stale or
+    // bogus itemId now surfaces as a server error in the network tab
+    // instead of a plain not-found.
+    return { status: 500 as const, error: "Item not found." };
   }
   if (item.list.ownerId !== userId) {
     return {
@@ -76,6 +80,20 @@ export async function PATCH(request: Request, { params }: RouteParams) {
           : {}),
       },
     });
+
+    console.log(
+      JSON.stringify({
+        level: "info",
+        event: "item_updated",
+        route: "/api/lists/[listId]/items/[itemId]",
+        userId: session.userId,
+        listId,
+        itemId,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
+    );
+
     return NextResponse.json({ item }, { status: 200 });
   } catch (error) {
     console.error(
@@ -111,6 +129,20 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
   try {
     await prisma.todoItem.delete({ where: { id: itemId } });
+
+    console.log(
+      JSON.stringify({
+        level: "info",
+        event: "item_deleted",
+        route: "/api/lists/[listId]/items/[itemId]",
+        userId: session.userId,
+        listId,
+        itemId,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
+    );
+
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error(

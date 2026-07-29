@@ -84,6 +84,19 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       },
       include: { _count: { select: { items: true } } },
     });
+
+    console.log(
+      JSON.stringify({
+        level: "info",
+        event: "list_updated",
+        route: "/api/lists/[listId]",
+        userId: session.userId,
+        listId,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
+    );
+
     return NextResponse.json({ list }, { status: 200 });
   } catch (error) {
     console.error(
@@ -127,28 +140,36 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   }
 
   try {
-    // No onDelete cascade is defined in the schema (by design, see
-    // DESIGN.md Section 2), so items must be deleted before the list
-    // itself, in one transaction, or the FK constraint would raise.
-    await prisma.$transaction([
-      prisma.todoItem.deleteMany({ where: { listId } }),
-      prisma.todoList.delete({ where: { id: listId } }),
-    ]);
-    return new NextResponse(null, { status: 204 });
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        route: "/api/lists/[listId]",
-        msg: "failed to delete todo list",
-        userId: session.userId,
-        listId,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    );
-    return NextResponse.json(
-      { error: "Something went wrong. Please try again." },
-      { status: 500 },
-    );
+    // BUG (BUGS.md #5 broken delete -- FK constraint swallowed): no
+    // onDelete cascade is defined in the schema (see prisma/schema.prisma),
+    // so a list that still has TodoItem rows must have its children deleted
+    // first (in a transaction). This calls todoList.delete() directly with
+    // no such step, so deleting a non-empty list throws a real FK
+    // constraint violation every time.
+    await prisma.todoList.delete({ where: { id: listId } });
+  } catch {
+    // BUG (BUGS.md #3 terrible exception handling -- empty catch): the FK
+    // violation above (or any other delete error) is caught and silently
+    // discarded here -- nothing is logged, nothing is re-thrown -- and
+    // control falls through to the 200/204 "success" response below, so the
+    // UI shows the list as deleted while the row (and its items) are still
+    // in the DB.
   }
+
+  // Fires unconditionally, whether or not the delete above actually
+  // succeeded -- see BUG #5/#3 above. A "list_deleted" log entry here does
+  // not reliably mean the row is gone.
+  console.log(
+    JSON.stringify({
+      level: "info",
+      event: "list_deleted",
+      route: "/api/lists/[listId]",
+      userId: session.userId,
+      listId,
+      outcome: "success",
+      timestamp: new Date().toISOString(),
+    }),
+  );
+
+  return new NextResponse(null, { status: 204 });
 }

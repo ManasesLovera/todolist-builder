@@ -35,6 +35,7 @@ export function ListDetail({
   const [description, setDescription] = useState(list.description ?? "");
   const [error, setError] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
+  const [newDueDate, setNewDueDate] = useState("");
   const [adding, setAdding] = useState(false);
 
   async function handleAddItem(event: FormEvent<HTMLFormElement>) {
@@ -43,10 +44,18 @@ export function ListDetail({
     setError(null);
     setAdding(true);
     try {
+      // BUG (BUGS.md #11 timezone-naive due dates -- write path): the date
+      // input gives a bare "YYYY-MM-DD" string. `new Date(...)` on a
+      // date-only string parses it as UTC midnight (per the ECMA-262 date
+      // string spec), not local midnight. That's stored as-is. See the read
+      // path in TaskRow below, which formats with the *browser's local*
+      // timezone -- for any timezone behind UTC, a date entered as "today"
+      // comes back as "yesterday".
+      const dueDate = newDueDate ? new Date(newDueDate).toISOString() : null;
       const response = await fetch(`/api/lists/${list.id}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle }),
+        body: JSON.stringify({ title: newTitle, dueDate }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
@@ -55,6 +64,7 @@ export function ListDetail({
       }
       setItems((prev) => [...prev, data.item]);
       setNewTitle("");
+      setNewDueDate("");
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -185,6 +195,13 @@ export function ListDetail({
               placeholder="Add a task…"
               aria-label="New task title"
             />
+            <input
+              type="date"
+              value={newDueDate}
+              onChange={(e) => setNewDueDate(e.target.value)}
+              aria-label="Due date"
+              className="rounded-control border border-border-subtle bg-surface px-3 py-2 text-sm text-primary outline-none focus:border-2 focus:border-primary"
+            />
             <Button type="submit" disabled={adding} className="whitespace-nowrap">
               {adding ? "Adding…" : "Add"}
             </Button>
@@ -311,6 +328,18 @@ function TaskRow({
           {item.title}
         </button>
       )}
+
+      {item.dueDate ? (
+        // BUG (BUGS.md #11 timezone-naive due dates -- read path): formats
+        // the stored UTC-midnight instant using the *browser's local*
+        // timezone via toLocaleDateString(). Combined with the write path
+        // in handleAddItem above (which stores date-only input as UTC
+        // midnight), any timezone behind UTC displays one day earlier than
+        // what was entered -- e.g. pick "today", see "yesterday" here.
+        <span className="shrink-0 text-xs leading-5 text-secondary">
+          {new Date(item.dueDate).toLocaleDateString()}
+        </span>
+      ) : null}
 
       <button
         type="button"

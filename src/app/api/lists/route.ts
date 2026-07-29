@@ -64,6 +64,18 @@ export async function POST(request: Request) {
       include: { _count: { select: { items: true } } },
     });
 
+    console.log(
+      JSON.stringify({
+        level: "info",
+        event: "list_created",
+        route: "/api/lists",
+        userId: session.userId,
+        listId: list.id,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
+    );
+
     return NextResponse.json({ list }, { status: 201 });
   } catch (error) {
     console.error(
