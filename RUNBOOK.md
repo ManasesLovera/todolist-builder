@@ -36,16 +36,24 @@
 
 ### Note on Grafana cross-references
 
-As of this writing, `grafana/provisioning/dashboards/json/` contains only a
-`.gitkeep` — **no dashboard JSON exists yet**, and there is no
-`grafana/DASHBOARDS.md` file. Dashboard panels are deferred to a later phase
-per `OBSERVABILITY.md` ("Dashboards are a placeholder"). Every "Where to
-look" section below therefore references the **Loki log event/field names**
-(confirmed from the actual `console.log`/`console.error` call sites) and the
-generic Fluent Bit → Loki → Grafana Explore path from `OBSERVABILITY.md`,
-rather than named dashboard panels. **Once the Grafana dashboards agent
-lands, this document needs a follow-up pass** to add specific
-dashboard/panel names per bug.
+The "ToDoList App — Observability" dashboard now exists at
+`grafana/provisioning/dashboards/json/todolist-observability.json`, with a
+full panel-by-panel and bug-by-bug explanation in `grafana/DASHBOARDS.md`
+(read that first — none of it was validated against a live Loki instance,
+and it explicitly flags which queries are high- vs. low-confidence).
+
+Every "Where to look" section below still references the **Loki log
+event/field names** (confirmed from the actual `console.log`/`console.error`
+call sites) rather than a specific panel name, for one important reason
+`grafana/DASHBOARDS.md` documents in detail: **several bugs have no log
+signal at all**, because the buggy code path never calls `console.log`
+on failure (task creation, FK-swallowed deletes, wrong-status-code
+branches, the client error boundary, and bug #1's connection failure
+itself). For those, the dashboard's "Bug #8 is not the source of truth"
+and best-effort DB-error-search panels are the closest available signal,
+not a direct hit — check `grafana/DASHBOARDS.md`'s "Bug-by-bug: what's
+visible in logs vs. invisible by design" table before assuming a panel
+will show something for every bug.
 
 ---
 
