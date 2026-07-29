@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Models below are copied verbatim from DESIGN.md Section 2 ---
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(MEMBER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  lists        TodoList[]
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+model TodoList {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  position    Int      @default(0)
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       TodoItem[]
+}
+
+model TodoItem {
+  id          String    @id @default(uuid())
+  title       String
+  isComplete  Boolean   @default(false)
+  position    Int       @default(0)
+  dueDate     DateTime?
+  listId      String
+  list        TodoList  @relation(fields: [listId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

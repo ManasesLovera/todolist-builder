@@ -1,0 +1,29 @@
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+/*
+ * Design tokens from DESIGN.md Section 5.1 (Color Palette & Tokens).
+ * Mirrored in tailwind.config.ts as named colors (bg-canvas, text-primary,
+ * bg-brand-primary, etc.) — keep both in sync.
+ */
+:root {
+  --bg-canvas: #f0fdf4;
+  --bg-surface: #ffffff;
+  --bg-accent-container: #a7f3d0;
+  --color-text-primary: #166534;
+  --color-text-secondary: #15803d;
+  --color-brand-primary: #ea580c;
+  --color-status-warning: #fbbf24;
+  --border-subtle: #dcfce7;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--bg-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
