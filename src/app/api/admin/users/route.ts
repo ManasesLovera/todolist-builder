@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/admin-guard";
 import { prisma } from "@/lib/prisma";
 
@@ -14,9 +13,8 @@ const createUserSchema = z.object({
 
 /**
  * POST /api/admin/users — create a user.
- * Validates input, enforces email uniqueness with a clean 400 (rather than
- * letting a raw Prisma unique-constraint error surface), hashes the initial
- * password, and never returns passwordHash in the response.
+ * Validates input, hashes the initial password, and never returns
+ * passwordHash in the response.
  */
 export async function POST(request: Request) {
   const guard = await requireAdmin();
@@ -42,16 +40,11 @@ export async function POST(request: Request) {
 
   const { name, email, role, password } = parsed.data;
 
-  // Pre-check for a friendly conflict response, in addition to catching the
-  // race below — avoids leaking a raw DB error to the client either way.
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return NextResponse.json(
-      { error: `A user with email "${email}" already exists` },
-      { status: 400 },
-    );
-  }
-
+  // BUG (BUGS.md #6 admin create-user duplicate email): no uniqueness
+  // pre-check and no P2002-specific handling below — a duplicate email just
+  // lets Prisma's raw unique-constraint error bubble into the generic catch,
+  // which logs an opaque message and returns a plain 500 with no indication
+  // the email was the problem.
   const passwordHash = await bcrypt.hash(password, 10);
 
   try {
@@ -66,19 +59,18 @@ export async function POST(request: Request) {
         updatedAt: true,
       },
     });
+    console.log(
+      JSON.stringify({
+        event: "admin.user.created",
+        actorUserId: guard.session.userId,
+        route: "/api/admin/users",
+        targetUserId: user.id,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
+    );
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      // Concurrent create won the race between our pre-check and this
-      // insert — still a clean 400, not a raw DB error.
-      return NextResponse.json(
-        { error: `A user with email "${email}" already exists` },
-        { status: 400 },
-      );
-    }
     console.error(
       JSON.stringify({
         level: "error",

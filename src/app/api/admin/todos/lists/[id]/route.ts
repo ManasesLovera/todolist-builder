@@ -54,6 +54,16 @@ export async function PATCH(
       where: { id },
       data: parsed.data,
     });
+    console.log(
+      JSON.stringify({
+        event: "admin.todo_list.updated",
+        actorUserId: guard.session.userId,
+        route: "/api/admin/todos/lists/[id]",
+        listId: id,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
+    );
     return NextResponse.json({ list: updated });
   } catch (error) {
     console.error(
@@ -95,6 +105,16 @@ export async function DELETE(
       prisma.todoItem.deleteMany({ where: { listId: id } }),
       prisma.todoList.delete({ where: { id } }),
     ]);
+    console.log(
+      JSON.stringify({
+        event: "admin.todo_list.deleted",
+        actorUserId: guard.session.userId,
+        route: "/api/admin/todos/lists/[id]",
+        listId: id,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
+    );
     return NextResponse.json({ deleted: true });
   } catch (error) {
     console.error(

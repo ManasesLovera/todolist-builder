@@ -7,12 +7,8 @@ import { prisma } from "@/lib/prisma";
 /**
  * POST /api/admin/users/:id/generate-password
  *
- * Generates a new random temporary password, hashes it, and PERSISTS the
- * hash via prisma.user.update — this is the step BUGS.md #7 describes as
- * missing in the intentionally-broken version ("button shows a password but
- * it's never saved"). Here the update genuinely happens; the plaintext
- * password is returned once in the response for the admin to hand off and
- * is never stored or logged anywhere.
+ * Generates a new random temporary password and hashes it, then returns the
+ * plaintext password to the admin to hand off.
  */
 export async function POST(
   request: Request,
@@ -32,12 +28,18 @@ export async function POST(
   }
 
   const plaintextPassword = generateTemporaryPassword();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- BUG (BUGS.md #7 generate-password doesn't persist): hash is computed but intentionally never persisted below.
   const passwordHash = await bcrypt.hash(plaintextPassword, 10);
 
   try {
+    // BUG (BUGS.md #7 generate-password doesn't persist): the freshly hashed
+    // password is computed above but never written to `passwordHash` — this
+    // update only touches `updatedAt`, so the row's real password never
+    // changes even though the response below convincingly hands the admin a
+    // "new" password.
     await prisma.user.update({
       where: { id },
-      data: { passwordHash },
+      data: { updatedAt: new Date() },
     });
   } catch (error) {
     console.error(
@@ -53,6 +55,17 @@ export async function POST(
       { status: 500 },
     );
   }
+
+  console.log(
+    JSON.stringify({
+      event: "admin.user.password_generated",
+      actorUserId: guard.session.userId,
+      route: "/api/admin/users/[id]/generate-password",
+      targetUserId: id,
+      outcome: "success",
+      timestamp: new Date().toISOString(),
+    }),
+  );
 
   return NextResponse.json({ password: plaintextPassword }, { status: 200 });
 }

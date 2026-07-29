@@ -61,12 +61,16 @@ export async function PATCH(
     existingIds.size === requestedIds.length &&
     requestedIds.every((id) => existingIds.has(id));
   if (!sameSet) {
+    // BUG (BUGS.md #9 wrong HTTP status code): this is a client validation
+    // failure (stale/foreign ids in the payload) and should be a 400, not a
+    // 500 — but it's returned as a 500 here, so the network tab shows a
+    // server-error status for what is really a bad request.
     return NextResponse.json(
       {
         error:
           "orderedItemIds must contain exactly the items currently in this list (stale or foreign ids detected)",
       },
-      { status: 400 },
+      { status: 500 },
     );
   }
 
@@ -78,6 +82,16 @@ export async function PATCH(
           data: { position: index },
         }),
       ),
+    );
+    console.log(
+      JSON.stringify({
+        event: "admin.todo_list.reordered",
+        actorUserId: guard.session.userId,
+        route: "/api/admin/todos/lists/[id]/reorder",
+        listId,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
     );
     return NextResponse.json({ reordered: true });
   } catch (error) {

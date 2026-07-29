@@ -7,10 +7,8 @@ import { prisma } from "@/lib/prisma";
  *
  * The schema has no onDelete cascade (TodoList.ownerId -> User.id is a plain
  * FK), so deleting a user who still owns lists would otherwise throw a raw
- * FK constraint violation. Rather than swallow that (see BUGS.md #5 for the
- * intentionally-broken version of this pattern), we cascade-delete the
- * user's items -> lists -> user inside a single transaction: either it all
- * succeeds, or nothing is deleted and we surface a real error.
+ * FK constraint violation. To avoid that, the user's items -> lists -> user
+ * are deleted inside a single transaction.
  */
 export async function DELETE(
   request: Request,
@@ -36,8 +34,14 @@ export async function DELETE(
     );
   }
 
+  // BUG (BUGS.md #3 terrible exception handling — empty catch): if the
+  // transaction throws (e.g. an FK constraint on a table not covered here,
+  // or a dropped DB connection), the catch below swallows it completely and
+  // we still report success — the UI shows the user as deleted, but the row
+  // is still in the DB on refresh.
+  let result: { deletedLists: number; deletedItems: number } | undefined;
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    result = await prisma.$transaction(async (tx) => {
       const deletedItems = await tx.todoItem.deleteMany({
         where: { list: { ownerId: id } },
       });
@@ -50,20 +54,20 @@ export async function DELETE(
         deletedItems: deletedItems.count,
       };
     });
-
-    return NextResponse.json({ deleted: true, ...result }, { status: 200 });
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        msg: "admin.users.delete failed",
-        userId: id,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    );
-    return NextResponse.json(
-      { error: "Failed to delete user" },
-      { status: 500 },
-    );
+  } catch {
+    // Intentionally empty — see BUG comment above.
   }
+
+  console.log(
+    JSON.stringify({
+      event: "admin.user.deleted",
+      actorUserId: guard.session.userId,
+      route: "/api/admin/users/[id]",
+      targetUserId: id,
+      outcome: "success",
+      timestamp: new Date().toISOString(),
+    }),
+  );
+
+  return NextResponse.json({ deleted: true, ...result }, { status: 200 });
 }

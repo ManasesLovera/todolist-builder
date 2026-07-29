@@ -70,18 +70,26 @@ export async function PATCH(
           : {}),
       },
     });
-    return NextResponse.json({ item: updated });
-  } catch (error) {
-    console.error(
+    console.log(
       JSON.stringify({
-        level: "error",
-        msg: "admin.todos.items.update failed",
+        event: "admin.todo_item.updated",
+        actorUserId: guard.session.userId,
+        route: "/api/admin/todos/items/[id]",
         itemId: id,
-        error: error instanceof Error ? error.message : String(error),
+        outcome: "success",
+        timestamp: new Date().toISOString(),
       }),
     );
+    return NextResponse.json({ item: updated });
+  } catch (error) {
+    // BUG (BUGS.md #3 terrible exception handling — raw stack trace leaked):
+    // no server-side structured log here, and the raw error message/stack
+    // is sent straight to the client instead of a clean, generic message.
     return NextResponse.json(
-      { error: "Failed to update item" },
+      {
+        error: String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
       { status: 500 },
     );
   }
@@ -106,6 +114,16 @@ export async function DELETE(
 
   try {
     await prisma.todoItem.delete({ where: { id } });
+    console.log(
+      JSON.stringify({
+        event: "admin.todo_item.deleted",
+        actorUserId: guard.session.userId,
+        route: "/api/admin/todos/items/[id]",
+        itemId: id,
+        outcome: "success",
+        timestamp: new Date().toISOString(),
+      }),
+    );
     return NextResponse.json({ deleted: true });
   } catch (error) {
     console.error(
