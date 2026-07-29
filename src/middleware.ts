@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE_NAME } from "@/lib/auth";
+
+// Duplicated literal (must match SESSION_COOKIE_NAME in @/lib/auth) rather than
+// imported: importing from auth.ts would pull its `node:crypto` usage into this
+// Edge Runtime bundle, which doesn't reliably support Node builtins.
+const SESSION_COOKIE_NAME = "session";
 
 /**
  * Route protection.
