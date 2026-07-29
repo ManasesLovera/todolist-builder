@@ -1,0 +1,215 @@
+{
+  "id": null,
+  "uid": "todolist-observability",
+  "title": "ToDoList App — Observability",
+  "description": "Log-based diagnosis dashboard for the ToDoList training app's 12 injected bugs (see BUGS.md / DESIGN.md §4). Built entirely by reading route source under src/app/api/** — not validated against a live Loki instance. See grafana/DASHBOARDS.md for per-panel confidence notes.",
+  "tags": ["todolist", "observability", "loki", "training"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "search",
+        "type": "textbox",
+        "label": "Line filter (raw log stream)",
+        "query": "",
+        "current": { "text": "", "value": "" }
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "How to use this dashboard",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 5 },
+      "options": {
+        "mode": "markdown",
+        "content": "**All queries here target the `web` container's stdout/stderr, shipped by Fluent Bit's `tail` input as Docker json-file logs.** Every container in this compose stack (postgres, loki, grafana, fluent-bit, web) shares the same two static Loki labels — `job=\"docker\"` and `pipeline=\"fluent-bit\"` — because Fluent Bit tails **all** container log files and the only per-container label (`filepath`, the tailed file path keyed by container ID) is not known ahead of time. So every query below starts from `{job=\"docker\"}` and narrows down to the Next.js app's lines using `| json` field extraction or line-content regex, exactly as fluent-bit/fluent-bit.conf's own comments recommend (\"until the app defines a stable `service` field, use the `filepath` label or the presence of parsed JSON fields\").\n\n**These dashboards were hand-written by reading the actual route source (`src/app/api/**`), not by exporting from a running Grafana instance — they have not been executed against real Loki data.** Field/label names may need small adjustments once the stack is actually running. See `grafana/DASHBOARDS.md` for a full per-panel confidence rating and a bug-by-bug map of what is / isn't visible in logs at all."
+      }
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "Raw log stream — web container (all output)",
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=\"docker\"} |~ `$search`",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Error rate — structured errors (level=\"error\") vs stderr stream",
+      "description": "Query A: JSON lines the app explicitly logged via console.error(...) with level:\"error\" (profile update, list create/update, item update/delete, admin create/delete/generate-password/reorder failures). Query B: any line Docker's json-file driver tagged stream=\"stderr\" (a superset — catches console.error output even on routes below that DON'T log level:\"error\", and would also catch a raw Node/Prisma crash trace). If B is consistently higher than A, that gap is exactly the kind of unlogged failure this app is full of (see BUGS.md #2, #3, #9).",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "structured error logs (level=error)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({job=\"docker\"} | json | level=\"error\" [$__interval]))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "any stderr output",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({job=\"docker\"} | json | stream=\"stderr\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Login attempts vs successful logins (auth health proxy)",
+      "description": "Query A counts every 'Login attempt:' debug line (fires on every well-formed login POST, success or failure — this is also Bug #10, the PII leak). Query B counts login_success events. The gap between A and B is an implicit failed-login rate, which includes wrong passwords (401), bad input (400), AND Bug #1's swallowed broken-DB-connection failures (which return 200 with an error body and log NOTHING else) — this is the main log-based way to notice Bug #1, since its failure path has no dedicated log line of its own.",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "login attempts (raw, incl. bug #10 PII line)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({job=\"docker\"} |~ \"Login attempt:\" [$__interval]))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "login_success events",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({job=\"docker\"} | json | event=\"login_success\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "bargauge",
+      "title": "Log volume by event (successful operations)",
+      "description": "Groups every JSON log line that has a non-empty `event` field by that field's value. Member routes log lowercase snake_case events (login_success, list_created, list_updated, list_deleted, item_updated, item_deleted, profile_updated); admin routes log dotted events (admin.user.created, admin.user.deleted, admin.user.password_generated, admin.todo_list.updated/deleted/reordered, admin.todo_item.updated/deleted). NOTE: todo item CREATION (POST /api/lists/[listId]/items, Bug #2) has NO console.log call on its success path at all — you will never see an 'item_created' event here regardless of whether Bug #2 is present, because that route was never instrumented for success. Its absence from this panel is not itself diagnostic.",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum by (event) (count_over_time({job=\"docker\"} | json | event=~\".+\" [$__range]))",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Error volume by route / message",
+      "description": "Groups console.error(...) JSON lines (level=\"error\") by `route` and `msg`. Route is present on most member-route errors (e.g. /api/lists, /api/lists/[listId], /api/profile, /api/lists/[listId]/items/[itemId]); some admin-route error logs only include `msg` with no `route` field at all (e.g. admin.users.create failed, admin.users.generatePassword failed) — grouping by both keeps those visible instead of collapsing into one empty-route bucket. This panel will surface Bug #6 (admin duplicate-email create) via msg=\"admin.users.create failed\". It will NOT surface bugs whose catch blocks are empty or don't call console.error at all (Bug #5 list delete, Bug #3's empty catches, Bug #2 and admin item PATCH's raw-stack-trace-to-client paths) — those are invisible here by design; see DASHBOARDS.md.",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum by (route, msg) (count_over_time({job=\"docker\"} | json | level=\"error\" [$__range]))",
+          "instant": true,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "text",
+      "title": "Bug #8 — /api/health is not the source of truth",
+      "gridPos": { "x": 0, "y": 29, "w": 24, "h": 4 },
+      "options": {
+        "mode": "markdown",
+        "content": "`GET /api/health` is hardcoded to always return `{ status: \"ok\" }` with **no real DB check** (Bug #8, `src/app/api/health/route.ts`). It will report green even while the DB connection is fully broken. **This dashboard's log-derived signals are the real source of truth, not that endpoint.** The panel below is the closest log-based proxy for real DB/auth health: Bug #1's broken-connection login failures are deliberately swallowed with no dedicated log line, so absence of a direct \"db_connection_failed\" event is expected — look instead at the login-attempts-vs-success gap above, and the best-effort search below for low-level driver/connection error text that may leak into stdout/stderr independent of the app's own (missing) logging for that path."
+      }
+    },
+    {
+      "id": 8,
+      "type": "logs",
+      "title": "Best-effort: low-level DB/connection error text (Bug #1)",
+      "description": "BEST-EFFORT / UNVALIDATED: Bug #1 (src/app/api/auth/login/route.ts) points a per-request PrismaClient at port 5433 instead of 5432 and its catch block swallows the error with zero logging — so there is no guaranteed app-level log line for this failure. This query is a heuristic guess at what the underlying pg driver / Prisma engine might still write to stdout/stderr on its own (connection-refused text, the wrong port number, etc.). Treat any hits as a lead, not confirmation — and treat zero hits as inconclusive, not as proof the DB connection is healthy.",
+      "gridPos": { "x": 0, "y": 33, "w": 24, "h": 6 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=\"docker\"} |~ `(?i)(econnrefused|5433|can't reach database|connection refused)`",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "logs",
+      "title": "Bug #10 — PII/secrets leaking into logs (plaintext password demo)",
+      "description": "HIGH CONFIDENCE: src/app/api/auth/login/route.ts logs `console.log(\"Login attempt:\", body)` on every login POST — note this is NOT JSON.stringify'd, it's a plain console.log with a second argument, so Fluent Bit's json_app parser will fail to parse this specific line as JSON (Reserve_Data On means it still ships to Loki as raw text). It will contain the literal plaintext password field from the request body. This line filter demonstrates the leak directly.",
+      "gridPos": { "x": 0, "y": 39, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=\"docker\"} |~ `(?i)password`",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "text",
+      "title": "Template: log-redaction alert rule",
+      "gridPos": { "x": 12, "y": 39, "w": 12, "h": 8 },
+      "options": {
+        "mode": "markdown",
+        "content": "A real redaction alert would fire on any container log line matching sensitive-looking field names, not just the one known demo line. Example Grafana-alerting-ready LogQL (adjust field list per app):\n\n```logql\nsum(count_over_time(\n  {job=\"docker\"} |~ `(?i)(\"?password(hash)?\"?\\s*[:=]|\"?currentPassword\"?\\s*:|\"?newPassword\"?\\s*:)`\n  [5m]\n)) > 0\n```\n\nThis is a **template, not a validated rule** — in a real system you'd also want to: alert on `passwordHash` specifically (never expected in logs at all, unlike a raw password which at least only appears due to Bug #10), route matches to a redaction/security channel rather than the general error channel, and add this as a proper Grafana alert rule (`alerting/` provisioning) rather than only a dashboard panel."
+      }
+    }
+  ]
+}

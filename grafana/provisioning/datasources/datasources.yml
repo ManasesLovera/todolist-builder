@@ -3,6 +3,13 @@ apiVersion: 1
 datasources:
   - name: Loki
     type: loki
+    # Pinned explicitly so hand-written dashboard JSON (see
+    # grafana/provisioning/dashboards/json/) can reference this datasource by
+    # a known, stable uid ("loki") instead of relying on Grafana's
+    # auto-generated uid, which is only stable across restarts once it has
+    # been created once and isn't predictable ahead of time from this file
+    # alone.
+    uid: loki
     access: proxy
     url: http://loki:3100
     isDefault: true
