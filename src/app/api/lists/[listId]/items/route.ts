@@ -56,11 +56,6 @@ export async function POST(request: Request, { params }: RouteParams) {
         dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
         listId,
         position: itemCount,
-        // BUG (BUGS.md #2 broken task creation): `notes` does not exist on
-        // the TodoItem model (see prisma/schema.prisma) -- this is an
-        // unknown-field ORM misuse that makes Prisma throw a validation
-        // error on every single call, so "Add task" always fails.
-        notes: parsed.data.title,
       },
     });
 

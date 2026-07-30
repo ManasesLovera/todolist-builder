@@ -17,7 +17,7 @@ Check a box once a bug is **approved for v1**.
 - [ ] **Broken auth** — login fails due to wrong DB connection string or malformed
       Prisma client init. Symptom: login always fails/500s. Root cause hidden because
       the error is swallowed or shown as a generic message with nothing logged.
-- [ ] **Broken task creation** — ORM misuse: `create()` called with a field that
+- [x] **Broken task creation** — ORM misuse: `create()` called with a field that
       doesn't exist on the schema, or a required relation omitted. Symptom: "Add task"
       does nothing or 500s. Root cause hidden the same way.
 - [ ] **Terrible exception handling** (the umbrella pattern, expressed via the
