@@ -12,13 +12,13 @@
 # is not expected to build successfully until the app scaffolding lands.
 
 # ---- Dependencies ------------------------------------------------------------
-FROM node:20-alpine AS deps
+FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install
 
 # ---- Build ---------------------------------------------------------------
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -28,7 +28,7 @@ RUN npm run build
 # No standalone output, so bring the whole built app (including full
 # node_modules) forward from the builder stage rather than cherry-picking
 # specific directories whose exact names/presence we don't want to assume.
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
