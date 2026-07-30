@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/generated/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { encodeSession, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { loginSchema } from "@/lib/validation";
 
@@ -39,31 +38,14 @@ export async function POST(request: Request) {
   // plaintext password -- to stdout on every login attempt.
   console.log("Login attempt:", body);
 
-  // BUG (BUGS.md #1 broken auth): this route instantiates its own PrismaClient
-  // instead of using the shared singleton from @/lib/prisma, and points it at
-  // the wrong port (5433 instead of the real Postgres port 5432 -- see
-  // docker-compose.yml). Only this route's DB calls fail; every other route
-  // still uses the shared singleton (correct DATABASE_URL) and works fine.
-  const brokenAdapter = new PrismaPg({
-    connectionString: "postgresql://todolist:todolist@localhost:5433/todolist",
-  });
-  const brokenPrisma = new PrismaClient({ adapter: brokenAdapter });
-
   let user;
   try {
-    user = await brokenPrisma.user.findUnique({ where: { email } });
+    user = await prisma.user.findUnique({ where: { email } });
   } catch (error) {
-    // BUG (BUGS.md #3 terrible exception handling -- 200 with error payload):
-    // a real DB connection failure should be a 5xx, but this returns 200
-    // with an error body, so client code checking `response.ok` sees a false
-    // success. Nothing is logged here either (mirrors BUGS.md #1: "root
-    // cause hidden because the error is swallowed... with nothing logged"),
-    // so the only trace of the real failure is the exception itself, never
-    // written anywhere.
-    void error;
+    console.error("Login DB error:", error);
     return NextResponse.json(
       { error: "Something went wrong. Please try again." },
-      { status: 200 },
+      { status: 500 },
     );
   }
 
