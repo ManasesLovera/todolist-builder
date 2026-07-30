@@ -8,20 +8,23 @@
 
 ## How to use this document
 
-1. Bring up the stack per `OBSERVABILITY.md` (`docker compose up --build`,
-   then run migrations/seed per `TESTING.md` section 1). This runbook does
-   **not** verify any of the below by executing the app — everything here
-   comes from reading source under `src/` and the existing tests under
-   `tests/present/` and `tests/fixed/`.
+1. Bring up the stack per `OBSERVABILITY.md` (`docker compose up` for deps,
+   then `npm run dev` for the app; or `docker compose --profile web up --build`
+   to run everything inside Docker). Then run migrations/seed per `TESTING.md`
+   section 1. This runbook does **not** verify any of the below by executing
+   the app — everything here comes from reading source under `src/` and the
+   existing tests under `tests/present/` and `tests/fixed/`.
 2. Use the app by hand — try to log in, add a task, delete a list, generate
    an admin password, etc. — and let each bug announce itself as a visible
    failure (per the "Scope rule" in `DESIGN.md`/`BUGS.md`: every bug is easy
    to *notice*, hard to *diagnose*).
 3. For each suspected bug:
    - Check Grafana **Explore** against the Loki datasource (see
-     `OBSERVABILITY.md`) for the log signal named in that bug's "Where to
-     look" section below, or tail `docker compose logs -f web` directly if
-     Grafana dashboards aren't built yet (see the Grafana note below).
+      `OBSERVABILITY.md`) for the log signal named in that bug's "Where to
+      look" section below, or tail the app's stdout directly (`npm run dev`
+      output) / `docker compose logs -f web` (if using `--profile web`)
+      instead if Grafana dashboards aren't built yet (see the Grafana note
+      below).
    - Run `npx vitest run tests/present/NN-*.test.ts` — it should **pass**,
      confirming the buggy behavior is present and you've found the right bug.
    - Read the "Root cause" section here, then go fix it in the file/line

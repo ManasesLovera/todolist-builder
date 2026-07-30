@@ -11,21 +11,30 @@ part of this phase; only the logging path (Fluent Bit -> Loki -> Grafana) is wir
 
 ## Bringing the stack up
 
-From the repo root:
+From the repo root, start the backing services (Postgres, Loki, Grafana, Fluent Bit):
 
 ```bash
-docker compose up --build
+docker compose up
 ```
 
-This builds the `web` image from the root `Dockerfile` and starts `postgres`, `web`,
-`fluent-bit`, `loki`, and `grafana` together on a shared bridge network.
+Run the Next.js app directly on the host:
+
+```bash
+npm run dev
+```
+
+To run everything (including the Next.js app) inside Docker:
+
+```bash
+docker compose --profile web up --build
+```
 
 ## Ports
 
 | Port | Service | Notes |
 | --- | --- | --- |
 | `3000` | `web` (Next.js app) | `http://localhost:3000` |
-| `3001` | Grafana UI | `http://localhost:3001` (container listens on 3000 internally; host port moved to 3001 since 3000 is taken by `web`) |
+| `3001` | Grafana UI | `http://localhost:3001` (container listens on 3000 internally; host port moved to 3001 since 3000 is taken by `web` when running with `--profile web`) |
 | `5432` | Postgres | `postgresql://todolist:todolist@localhost:5432/todolist` from the host |
 | `3100` | Loki | Push/query API, mainly used internally by Grafana and Fluent Bit (`http://loki:3100`) |
 

@@ -20,6 +20,8 @@ services:
       - observability
 
   web:
+    profiles:
+      - web
     build:
       context: .
       dockerfile: Dockerfile
@@ -50,7 +52,6 @@ services:
     container_name: todolist-fluent-bit
     restart: unless-stopped
     depends_on:
-      - web
       - loki
     volumes:
       - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
